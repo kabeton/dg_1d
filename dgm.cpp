@@ -18,7 +18,7 @@ dgm::dgm(int _k, int _N, double T0, double T, double dT, double x0, double xf) {
 
   // allocate space for solution matrix and flux vector
   U.resize(N);
-  G = Eigen::VectorXd::Zero(N);
+  G.assign(N, Eigen::VectorXd::Zero(k));
 
   // precompute matrices
   Minv = Eigen::MatrixXd::Zero(k, k);
@@ -47,10 +47,12 @@ void dgm::initial_condition(std::function<double(double)> u0, double _a) {
   update_flux();
 }
 
-void dgm::update_flux() { //TODO: fix this
-  for(int v = 0; v < k; v++) {
-    if(v % 2 == 0) G[v] = g(v + 1) + g(v);
-    if(v % 2 != 0) G[v] = g(v + 1) - g(v);
+void dgm::update_flux() { 
+  for(int v = 0; v < N; v++) {
+    for(int l = 0; l < k; l++) {
+      if(l % 2 == 0) G[v][l] = g(v + 1) + g(v);
+      if(l % 2 != 0) G[v][l] = g(v + 1) - g(v);
+    }
   }
 }
 
@@ -109,9 +111,9 @@ void dgm::integrate(double eps) {
 double dgm::sol_dist(std::vector<vect> U1, std::vector<vect> U2) {
   double t = 0, tm = -DBL_MAX;
   int total_points = U1[0].size();
-  for(int v = 0; v < N; v++) {
+  for(int l = 0; l < N; l++) {
     for(int i = 0; i < total_points; i+= total_points/10) {
-      t = (U1[v][i] - U2[v][i*2]).array().abs().maxCoeff();
+      t = (U1[l][i*2] - U2[l][i]).array().abs().maxCoeff();
       if(t > tm) tm = t;
     }
   }
@@ -120,9 +122,7 @@ double dgm::sol_dist(std::vector<vect> U1, std::vector<vect> U2) {
 
 Eigen::VectorXd dgm::method(Eigen::VectorXd u) { //TODO: fix flux
   double ci = 2.*a/(x(v + 1) - x(v));
-  std::cout << (Minv*K*u).rows() << " " << (Minv*K*u).cols() << std::endl;
-  std::cout << (Minv*G[v]).rows() << " " << (Minv*G[v]).cols() << std::endl;
-  return ci*((Minv*K)*u) - ci*(Minv*G);
+  return ci*((Minv*K)*u) - ci*(Minv*G[v]);
 }
 
 double dgm::g(int i) {

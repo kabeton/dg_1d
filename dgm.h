@@ -15,7 +15,8 @@ private:
   double t0, t, dt, nt; 
   double rt, a;
   double errfin;
-  Eigen::VectorXd x, G;
+  Eigen::VectorXd x;
+  vect G;
   Eigen::MatrixXd Minv, K;
   std::vector<vect> U;
 
