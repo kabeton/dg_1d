@@ -38,10 +38,14 @@ void dgm::initial_condition(std::function<double(double)> u0, double _a) {
   // get initial coefficients from scalar product with basis function
   for(v = 0; v < N; v++) {
     U[v].push_back(Eigen::VectorXd::Zero(k));
-    auto u0_stdint = [this, &u0](double y) {return u0((x(v + 1) - x(v))*y/2 + (x(v + 1) - x(v))/2);};
+    auto u0_stdint = [this, &u0](double y) {return u0((x(v + 1) - x(v))*y/2 + (x(v + 1) + x(v))/2);};
     for(int j = 0; j < k; j++) {
-      U[v][0][j] = gl_quadcoef(u0, k, j);
+      U[v][0][j] = (x(v + 1) - x(v))/2.*gl_quadcoef(u0_stdint, k, j);
     }
+    std::cout << x(v) << " " << reconstruct(x(v), U[v][0]) << std::endl;
+    std::cout << u0(x(v)) << std::endl;
+    std::cout << reconstruct(x(v), U[v][0]) - u0(x(v)) << std::endl;
+    std::cout << "-----" << std::endl;
   }
 
   update_flux();
@@ -84,6 +88,7 @@ void dgm::solve(double h) {
     update_flux();
     if(rt <= nt && rt + h >= nt) {
       write("out.vtk");
+      nt += dt;
     }
     rt += h;
   }
@@ -96,13 +101,15 @@ void dgm::integrate(double eps) {
   h /= 2;
   solve(h);
   errfin = sol_dist(U, Utmp);
+  std::cout << errfin << std::endl;
   int iters = 1;
-  while(errfin < eps) {
+  while(errfin > eps) {
     std::cout << "solving with h = " << h << " error = " << errfin << std::endl;
     Utmp = U;
     h /= 2;
     solve(h);
     iters++;
+    errfin = sol_dist(U, Utmp);
   }
   errfin = sol_dist(U, Utmp);
   std::cout << "finished in " << iters << " iterations, final error = " << errfin << std::endl;
@@ -110,9 +117,9 @@ void dgm::integrate(double eps) {
 
 double dgm::sol_dist(std::vector<vect> U1, std::vector<vect> U2) {
   double t = 0, tm = -DBL_MAX;
-  int total_points = U1[0].size();
+  int total_points = U2[0].size();
   for(int l = 0; l < N; l++) {
-    for(int i = 0; i < total_points; i+= total_points/10) {
+    for(int i = 0; i < total_points; i += total_points/10) {
       t = (U1[l][i*2] - U2[l][i]).array().abs().maxCoeff();
       if(t > tm) tm = t;
     }
@@ -148,7 +155,6 @@ void dgm::write(std::string name) {
 	vtk_file << "LOOKUP_TABLE default\n";
   for(int i = 0; i < N; i++) {
     vtk_file << reconstruct(x(i), U[i].back()) << "\n";
-    vtk_file << reconstruct(x(i + 1), U[i].back()) << "\n";
   }
   vtk_file.close();
 }
