@@ -25,46 +25,79 @@ dgm::dgm(int _k, int _N, double T0, double T, double dT, double x0, double xf) {
   K = Eigen::MatrixXd::Zero(k, k);
 
   for(int i = 0; i < k; i++) {
-    for(int j = 0; j < k; j++) {
+    for(j = 0; j < k; j++) {
       if(i == j) Minv(i, i) = 1./gl_quad0d(j, j, k);
       K(i, j) = gl_quad1d(j, i, k);
     }
   }
+  v_def = false;
+  k_def = false;
 }
 
-void dgm::initial_condition(std::function<double(double)> u0, double _a) {
+void dgm::initial_condition(func u0, double _a) {
   a = _a;
 
   // get initial coefficients from scalar product with basis function
   for(v = 0; v < N; v++) {
+    v_def = true;
     U[v].push_back(Eigen::VectorXd::Zero(k));
-    auto u0_stdint = [this, &u0](double y) {return u0((x(v + 1) - x(v))*y/2 + (x(v + 1) + x(v))/2);};
-    for(int j = 0; j < k; j++) {
-      U[v][0][j] = (x(v + 1) - x(v))/2.*gl_quadcoef(u0_stdint, k, j);
+    for(j = 0; j < k; j++) {
+      k_def = true;
+      U[v][0][j] = 0.25*scalar_product_basis(u0); // idk wtf this 0.25 does but it seems right with it
     }
-    std::cout << x(v) << " " << reconstruct(x(v), U[v][0]) << std::endl;
-    std::cout << u0(x(v)) << std::endl;
+    std::cout << u0(x(v)) << " " << reconstruct(x(v), U[v][0]) << std::endl;
     std::cout << reconstruct(x(v), U[v][0]) - u0(x(v)) << std::endl;
     std::cout << "-----" << std::endl;
   }
 
+  v_def = false;
+  k_def = false;
   update_flux();
 }
 
+double dgm::scalar_product_basis(func f1) {
+  if(!(v_def)) {
+    std::cout << "warning: " << v_def << std::endl;
+    return 0;
+  }
+
+  auto f1_stdint = [this, &f1](double y) {return f1((x(v + 1) - x(v))*y/2 + (x(v + 1) + x(v))/2);};
+  auto f2_stdint = [this](double y) {return phi((x(v + 1) - x(v))*y/2 + (x(v + 1) + x(v))/2);};
+
+  Eigen::ArrayXd roots(k);
+  roots = get_roots(k);
+  Eigen::ArrayXd weights(k);
+  weights = get_weights(k);
+  double res = 0;
+
+  for(int i = 0; i < k; i++) {
+    res += weights(i)*f1_stdint(roots(i))*f2_stdint(roots(i));
+  }
+
+  return res;
+}
+
 void dgm::update_flux() { 
-  for(int v = 0; v < N; v++) {
+  for(v = 0; v < N; v++) {
+    v_def = true;
     for(int l = 0; l < k; l++) {
+      k_def = true;
       if(l % 2 == 0) G[v][l] = g(v + 1) + g(v);
       if(l % 2 != 0) G[v][l] = g(v + 1) - g(v);
     }
   }
+  v_def = false;
+  k_def = false;
 }
 
-double dgm::reconstruct(double x, Eigen::VectorXd coef) {
+double dgm::reconstruct(double p, Eigen::VectorXd coef) {
   double res = 0;
-  for(int i = 0; i < k; i++) {
-    res += coef[i]*P(i, x);
+  int nc = 0;
+  if(k_def == false) {k_def = true; nc++;}
+  for(j = 0; j < k; j++) {
+    res += coef[j]*phi(p);
   }
+  if(nc) k_def = false;
   return res;
 }
 
@@ -87,7 +120,8 @@ void dgm::solve(double h) {
     time_step(h);
     update_flux();
     if(rt <= nt && rt + h >= nt) {
-      write("out.vtk");
+      std::string oname = std::to_string(nt) + ".vtk";
+      write(oname);
       nt += dt;
     }
     rt += h;
@@ -134,7 +168,7 @@ Eigen::VectorXd dgm::method(Eigen::VectorXd u) { //TODO: fix flux
 
 double dgm::g(int i) {
   if(i == 0) {
-    return reconstruct(x[N], U[N - 1].back());
+    return reconstruct(x(Eigen::last), U.back().back());
   } else {
     return reconstruct(x(i), U[i - 1].back());
   }
@@ -147,14 +181,24 @@ void dgm::write(std::string name) {
   vtk_file.open(nname.c_str(), std::ios::out);
   vtk_file << "# vtk DataFile Version 3.0\nVx data\nASCII\n\n";
   vtk_file << "DATASET POLYDATA\nPOINTS " << N + 1 << " float\n";
-  for(int i = 0; i < N + 1; i++) {
-    vtk_file << x(i) << " " << 0.0 << " " << 0.0 << "\n";
+  for(v = 0; v < N + 1; v++) {
+    vtk_file << x(v) << " " << 0.0 << " " << 0.0 << "\n";
   }
 	vtk_file << "\nPOINT_DATA " << N + 1 << "\n";
 	vtk_file << "SCALARS v FLOAT\n";
 	vtk_file << "LOOKUP_TABLE default\n";
-  for(int i = 0; i < N; i++) {
-    vtk_file << reconstruct(x(i), U[i].back()) << "\n";
+  v_def = true;
+  for(v = 0; v < N; v++) {
+    vtk_file << reconstruct(x(v), U[v].back()) << "\n";
   }
   vtk_file.close();
+  v_def = false;
+}
+
+double dgm::phi(double p) {
+  if(!(v_def && k_def)) {
+    std::cout << "warning: " << v_def << " " << k_def << std::endl;
+  }
+  double hv = abs(x(v + 1) - x(v));
+  return 1./sqrt(hv)*sqrt(2*j + 1)*P(j, 2*(p - x(v))/hv - 1);
 }

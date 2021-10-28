@@ -8,10 +8,11 @@
 #include <iostream>
 
 typedef std::vector<Eigen::VectorXd> vect;
+typedef std::function<double(double)> func;
 
 class dgm {
 private:
-  int k, N, v;
+  int k, N, v, j;
   double t0, t, dt, nt; 
   double rt, a;
   double errfin;
@@ -19,11 +20,14 @@ private:
   vect G;
   Eigen::MatrixXd Minv, K;
   std::vector<vect> U;
+  bool v_def, k_def;
 
 public:
   dgm(int _k, int _N, double T0, double T, double dT, double x0, double xf);
-  void initial_condition(std::function<double(double)> u0, double _a = 1);
+  void initial_condition(func u0, double _a = 1);
   double g(int i);
+  double phi(double x);
+  double scalar_product_basis(func f1);
   void update_flux();
   double reconstruct(double x, Eigen::VectorXd coef);
   void write(std::string name);

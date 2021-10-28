@@ -1,13 +1,15 @@
+CXXFLAGS=-g -std=c++17 -Wall
+
 all: solver
 
 solver: second.o dgm.o
-	g++ -g -Wall -o dg second.o dgm.o
+	g++ -o dg second.o dgm.o
 
 second.o: second.cpp dgm.h quad.h
-	g++ -g -c second.cpp
+	g++ -c second.cpp
 
 dgm.o: dgm.cpp dgm.h quad.h
-	g++ -g -c dgm.cpp
+	g++ -c dgm.cpp
 
 clean:
 	rm *.o

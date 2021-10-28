@@ -84,16 +84,4 @@ double gl_quad1d(int m, int n, int k) {
   return res;
 }
 
-double gl_quadcoef(std::function<double(double)> u0, int k, int a) {
-  Eigen::ArrayXd roots(k);
-  roots = get_roots(k);
-  Eigen::ArrayXd weights(k);
-  weights = get_weights(k);
-  double res = 0;
-
-  for(int i = 0; i < k; i++) {
-    res += weights(i)*u0(roots(i))*P(a, roots(i));
-  }
-  return res;
-}
 #endif
