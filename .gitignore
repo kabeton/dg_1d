@@ -7,4 +7,5 @@ saving_1d_to_vtk.cpp
 *.dat
 *.o
 dg
-output/*
+output/
+gp/
