@@ -6,13 +6,13 @@
 #include "dgm.h"
 
 int main() {
-  int k = 10, N = 20;
-  double T0 = 0., T = 15., dt = 1.;
+  int k = 2, N = 20;
+  double t0 = 0., t = 15., dt = 1.;
   double x0 = 0., xf = 5.;
   auto u0 = [xf](double x) {return sin(4*M_PI*x/xf);};
   auto u1 = [](double x) {return x;};
-  dgm solver(k, N, T0, T, dt, x0, xf);
+  dgm solver(k, N, t0, t, dt, x0, xf);
   solver.initial_condition(u0);
-  solver.solve((T - T0)/40);
+  solver.solve((t - t0)/10);
   return 0;
 }

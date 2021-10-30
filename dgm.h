@@ -14,7 +14,7 @@ class dgm {
 private:
   int k, N, v, j;
   double t0, t, dt, nt; 
-  double rt, a;
+  double a;
   double errfin;
   Eigen::VectorXd x;
   vect G;

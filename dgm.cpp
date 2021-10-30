@@ -40,7 +40,7 @@ dgm::dgm(int _k, int _N, double T0, double T, double dT, double x0, double xf) {
 
 void dgm::initial_condition(func u0, double _a) {
   a = _a;
-  double ratio = (double)k/N/4; // idk wtf is this and why we need it
+  double ratio = 10./N/4; // idk wtf is this and why we need it
 
   // get initial coefficients from scalar product with basis function
   for(v = 0; v < N; v++) {
@@ -112,6 +112,7 @@ double dgm::g(int i) {
   }
   #endif
 
+  //doesn't work
   #ifdef CENTERED
     if(i == 0) {
       return (reconstruct(x(i + 1), U[N - 1].back()) + reconstruct(x(i), U[0].back()))/2;
@@ -149,7 +150,10 @@ void dgm::time_step(double h) {
 }
 
 void dgm::solve(double h) {
-  rt = t0;
+  double dx = x(1) - x(0);
+  while(h > dx) h /= 2;
+  std::cout << h << " " << x(1) - x(0) << std::endl;
+  double rt = t0;
   nt = t0 + dt;
   while(rt < t) {
     time_step(h);
@@ -164,7 +168,9 @@ void dgm::solve(double h) {
 }
 
 void dgm::integrate(double eps) {
+  double dx = x(1) - x(0);
   double h = (t - t0)/10;
+  while(h > dx) h /= 2;
   solve(h);
   std::vector<vect> Utmp = U;
   h /= 2;
@@ -245,7 +251,7 @@ double dgm::phi(double p) {
   if(!(v_def && k_def)) {
     std::cout << "warning: " << v_def << " " << k_def << std::endl;
   }
-  double hv = abs(x(v + 1) - x(v));
+  double hv = x(v + 1) - x(v);
   return 1./sqrt(hv)*sqrt(2*j + 1)*P(j, 2*(p - x(v))/hv - 1);
 }
 
