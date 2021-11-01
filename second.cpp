@@ -6,7 +6,7 @@
 #include "dgm.h"
 
 int main() {
-  int k = 2, N = 20;
+  int k = 4, N = 15;
   double t0 = 0., t = 15., dt = 1.;
   double x0 = 0., xf = 5.;
   auto u0 = [xf](double x) {return sin(4*M_PI*x/xf);};

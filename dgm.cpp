@@ -25,17 +25,17 @@ dgm::dgm(int _k, int _N, double T0, double T, double dT, double x0, double xf) {
   // precompute matrices
   Minv = Eigen::MatrixXd::Zero(k, k);
   K = Eigen::MatrixXd::Zero(k, k);
-
+  
   for(int i = 0; i < k; i++) {
-    for(j = 0; j < k; j++) {
+    for(int j = 0; j < k; j++) {
       //if(i == j) Minv(i, i) = 1./gl_quad0d(i, i, k);
       if(i == j) Minv(i, i) = 1.;
       //K(i, j) = gl_quad1d(j, i, k);
-      K(i, j) = sqrt((2*i + 1)*(2*j + 1))*gl_quad1d(j, i, k);
+      K(i, j) = gl_quad1d(j, i, k);
     }
   }
+
   v_def = false;
-  k_def = false;
 }
 
 void dgm::initial_condition(func u0, double _a) {
@@ -43,30 +43,27 @@ void dgm::initial_condition(func u0, double _a) {
   double ratio = 10./N/4; // idk wtf is this and why we need it
 
   // get initial coefficients from scalar product with basis function
+  v_def = true;
   for(v = 0; v < N; v++) {
-    v_def = true;
     U[v].push_back(Eigen::VectorXd::Zero(k));
-    for(j = 0; j < k; j++) {
-      k_def = true;
-      U[v][0][j] = ratio*scalar_product_basis(u0); 
+    for(int j = 0; j < k; j++) {
+      U[v][0][j] = ratio*scalar_product_basis(u0, j); 
     }
-
   }
 
   v_def = false;
-  k_def = false;
   update_flux();
   write("dg_" + std::to_string(0));
 }
 
-double dgm::scalar_product_basis(func f1) {
+double dgm::scalar_product_basis(func f1, int j) {
   if(!(v_def)) {
     std::cout << "warning: " << v_def << std::endl;
     return 0;
   }
 
   auto f1_stdint = [this, &f1](double y) {return f1((x(v + 1) - x(v))*y/2 + (x(v + 1) + x(v))/2);};
-  auto f2_stdint = [this](double y) {return phi((x(v + 1) - x(v))*y/2 + (x(v + 1) + x(v))/2);};
+  auto f2_stdint = [this, j](double y) {return phi((x(v + 1) - x(v))*y/2 + (x(v + 1) + x(v))/2, j);};
 
   Eigen::ArrayXd roots(k);
   roots = get_roots(k);
@@ -82,18 +79,13 @@ double dgm::scalar_product_basis(func f1) {
 }
 
 void dgm::update_flux() { 
+  v_def = true;
   for(v = 0; v < N; v++) {
-    v_def = true;
-    double hv = sqrt(x(v + 1) - x(v));
-    for(j = 0; j < k; j++) {
-      k_def = true;
-      G[v][j] = (g(v + 1)*phi(x(v + 1)) - g(v)*phi(x(v)));
-      //if(l == 0) G[v][l] = g(v + 1);
-      //if(l == k - 1) G[v][l] = g(v + 1);
+    for(int j = 0; j < k; j++) {
+      if(j == j) G[v][j] = (g(v + 1)*phi(x(v + 1), j) - g(v)*phi(x(v), j));
     } 
   }
   v_def = false;
-  k_def = false;
 }
 
 double dgm::g(int i) {
@@ -112,7 +104,7 @@ double dgm::g(int i) {
   }
   #endif
 
-  //doesn't work
+  //doesn't work, mb will fix later for fun
   #ifdef CENTERED
     if(i == 0) {
       return (reconstruct(x(i + 1), U[N - 1].back()) + reconstruct(x(i), U[0].back()))/2;
@@ -124,16 +116,11 @@ double dgm::g(int i) {
   #endif
 }
 
-double dgm::reconstruct(double p, Eigen::VectorXd coef) {
+double dgm::reconstruct(double p, Eigen::VectorXd &coef) {
   double res = 0;
-  int j_old = j;
-  int nc = 0;
-  if(k_def == false) {k_def = true; nc++;}
-  for(j = 0; j < k; j++) {
-    res += coef[j]*phi(p);
+  for(int j = 0; j < k; j++) {
+    res += coef[j]*phi(p, j);
   }
-  if(nc) k_def = false;
-  j = j_old;
   return res;
 }
 
@@ -190,7 +177,7 @@ void dgm::integrate(double eps) {
   std::cout << "finished in " << iters << " iterations, final error = " << errfin << std::endl;
 }
 
-double dgm::sol_dist(std::vector<vect> U1, std::vector<vect> U2) {
+double dgm::sol_dist(std::vector<vect> &U1, std::vector<vect> &U2) {
   double t = 0, tm = -DBL_MAX;
   int total_points = U2[0].size();
   for(int l = 0; l < N; l++) {
@@ -202,9 +189,9 @@ double dgm::sol_dist(std::vector<vect> U1, std::vector<vect> U2) {
   return tm;
 }
 
-Eigen::VectorXd dgm::method(Eigen::VectorXd u) { 
+Eigen::VectorXd dgm::method(const Eigen::VectorXd &u) { 
   double ci = a/(x(v + 1) - x(v));
-  return ci*K*u + a*G[v];
+  return u + G[v];
 }
 
 void dgm::write(std::string name) {
@@ -247,9 +234,9 @@ void dgm::write(std::string name) {
   v_def = false;
 }
 
-double dgm::phi(double p) {
-  if(!(v_def && k_def)) {
-    std::cout << "warning: " << v_def << " " << k_def << std::endl;
+double dgm::phi(double p, int j) {
+  if(!(v_def)) {
+    std::cout << "warning: " << v_def << std::endl;
   }
   double hv = x(v + 1) - x(v);
   return 1./sqrt(hv)*sqrt(2*j + 1)*P(j, 2*(p - x(v))/hv - 1);
