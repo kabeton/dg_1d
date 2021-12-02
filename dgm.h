@@ -15,7 +15,6 @@ private:
   int k, N, v;
   double t0, t, dt, nt; 
   double a;
-  double errfin;
   Eigen::VectorXd x;
   vect G;
   Eigen::MatrixXd Minv, K;
@@ -32,6 +31,7 @@ public:
   double reconstruct(double x, Eigen::VectorXd &coef);
   void write(std::string name);
   void time_step(double h);
+  void time_step_mp(double h);
   void integrate(double eps);
   void solve(double h);
   void debug_drawt(std::string name);

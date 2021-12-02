@@ -31,7 +31,7 @@ dgm::dgm(int _k, int _N, double T0, double T, double dT, double x0, double xf) {
       //if(i == j) Minv(i, i) = 1./gl_quad0d(i, i, k);
       if(i == j) Minv(i, i) = 1.;
       //K(i, j) = gl_quad1d(j, i, k);
-      K(i, j) = gl_quad1d(j, i, k);
+      K(i, j) = sqrt(2*j+1)*gl_quad1d(j, i, k);
     }
   }
 
@@ -82,7 +82,7 @@ void dgm::update_flux() {
   v_def = true;
   for(v = 0; v < N; v++) {
     for(int j = 0; j < k; j++) {
-      if(j == j) G[v][j] = (g(v + 1)*phi(x(v + 1), j) - g(v)*phi(x(v), j));
+      if(j % 2 == 0) G[v][j] = (-g(v + 1)*phi(x(v + 1), j) + g(v)*phi(x(v), j));
     } 
   }
   v_def = false;
@@ -92,6 +92,7 @@ double dgm::g(int i) {
   // indexing for x(i) works because we have v fixed and reconstruct 
   // maps x(v + 1) to 1 for any i so x(v + 1) returns the rightmost point 
   // of corresponding section
+  /*
   #ifdef UPWIND
   if(i == v) {
     if(v == 0) {
@@ -103,6 +104,25 @@ double dgm::g(int i) {
     return reconstruct(x(v + 1), U[v].back());
   }
   #endif
+  */
+  double val_left = 0., val_right = 0.;
+  if(i == v) {
+    val_right = reconstruct(x(v), U[v].back());
+    if(v == 0) {
+      val_left = reconstruct(x(v + 1), U.back().back());
+    } else {
+      val_left = reconstruct(x(v + 1), U[v - 1].back()); 
+    }
+  } else {
+    val_left = reconstruct(x(v + 1), U[v].back());
+    if(v == N - 1) {
+      val_right = reconstruct(x(v), U[0].back());
+    } else {
+      val_right = reconstruct(x(v), U[v + 1].back());
+    }
+  }
+
+  return val_left;
 
   //doesn't work, mb will fix later for fun
   #ifdef CENTERED
@@ -136,6 +156,15 @@ void dgm::time_step(double h) {
   }
 }
 
+void dgm::time_step_mp(double h) {
+  for(v = 0; v < N; v++) {
+    Eigen::VectorXd f;
+    Eigen::VectorXd tmp = U[v].back();
+    f = method(tmp);
+    U[v].push_back(tmp + h*method(tmp + h/2*f));
+  }
+}
+
 void dgm::solve(double h) {
   double dx = x(1) - x(0);
   while(h > dx) h /= 2;
@@ -143,7 +172,7 @@ void dgm::solve(double h) {
   double rt = t0;
   nt = t0 + dt;
   while(rt < t) {
-    time_step(h);
+    time_step_mp(h);
     update_flux();
     if(rt <= nt && rt + h >= nt) {
       std::string oname = "dg_" +  std::to_string((int)(nt*1e4));
@@ -160,13 +189,16 @@ void dgm::integrate(double eps) {
   while(h > dx) h /= 2;
   solve(h);
   std::vector<vect> Utmp = U;
+  double errfin = 0;
   h /= 2;
   solve(h);
   errfin = sol_dist(U, Utmp);
   std::cout << errfin << std::endl;
   int iters = 1;
   while(errfin > eps) {
-    std::cout << "solving with h = " << h << " error = " << errfin << std::endl;
+    std::cout << "--------------------------" << std:: endl << std::endl;
+    std::cout << "solving with h = " << h << " error = " << errfin << std::endl << std::endl;
+    std::cout << "--------------------------" << std:: endl;
     Utmp = U;
     h /= 2;
     solve(h);
@@ -191,7 +223,8 @@ double dgm::sol_dist(std::vector<vect> &U1, std::vector<vect> &U2) {
 
 Eigen::VectorXd dgm::method(const Eigen::VectorXd &u) { 
   double ci = a/(x(v + 1) - x(v));
-  return u + G[v];
+  double hv = sqrt(x(v + 1) - x(v));
+  return hv*hv*K*u + hv*G[v];
 }
 
 void dgm::write(std::string name) {
@@ -259,7 +292,7 @@ void dgm::debug_drawt(std::string name) {
   }
   v_def = false;
 
-  FILE *gp = popen("gnuplot", "w");
+  FILE *gp = popen("gnuplot > /dev/null 2>&1", "w");
   fprintf(gp, "set terminal png size 1300, 800\n");
   fprintf(gp, "set output \"%s\"\n", name.c_str());
   fprintf(gp, "set grid x y\n");
