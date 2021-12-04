@@ -58,7 +58,23 @@ Eigen::ArrayXd get_weights(int k) {
   return weights;
 }
 
+double gl_quad(int _n, std::function<double(double)> f) {
+  int n = 2*_n;
+  Eigen::ArrayXd roots(n);
+  roots = get_roots(n);
+  Eigen::ArrayXd weights(n);
+  weights = get_weights(n);
+  double res = 0;
+
+  for(int i = 0; i < n; i++) {
+    res += weights(i)*f(roots(i));
+  }
+
+  return res;
+}
+
 double gl_quad0d(int m, int n, int k) {
+  k = k*2;
   Eigen::ArrayXd roots(k);
   roots = get_roots(k); 
   Eigen::ArrayXd weights(k);
@@ -72,6 +88,7 @@ double gl_quad0d(int m, int n, int k) {
 }
 
 double gl_quad1d(int m, int n, int k) {
+  k = k*2;
   Eigen::ArrayXd roots(k);
   roots = get_roots(k); 
   Eigen::ArrayXd weights(k);

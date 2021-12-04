@@ -34,6 +34,7 @@ public:
   void time_step_mp(double h);
   void integrate(double eps);
   void solve(double h);
+  void intgr();
   void debug_drawt(std::string name);
   double sol_dist(std::vector<vect> &U1, std::vector<vect> &U2);
   Eigen::VectorXd method(const Eigen::VectorXd &u);

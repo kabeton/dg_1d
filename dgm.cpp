@@ -28,10 +28,8 @@ dgm::dgm(int _k, int _N, double T0, double T, double dT, double x0, double xf) {
   
   for(int i = 0; i < k; i++) {
     for(int j = 0; j < k; j++) {
-      //if(i == j) Minv(i, i) = 1./gl_quad0d(i, i, k);
-      if(i == j) Minv(i, i) = 1.;
-      //K(i, j) = gl_quad1d(j, i, k);
-      K(i, j) = sqrt(2*j+1)*gl_quad1d(j, i, k);
+      if(i == j) Minv(i, i) = 1./gl_quad0d(i, i, k);
+      K(i, j) = gl_quad1d(i, j, k);
     }
   }
 
@@ -40,14 +38,13 @@ dgm::dgm(int _k, int _N, double T0, double T, double dT, double x0, double xf) {
 
 void dgm::initial_condition(func u0, double _a) {
   a = _a;
-  double ratio = 10./N/4; // idk wtf is this and why we need it
 
   // get initial coefficients from scalar product with basis function
   v_def = true;
   for(v = 0; v < N; v++) {
     U[v].push_back(Eigen::VectorXd::Zero(k));
     for(int j = 0; j < k; j++) {
-      U[v][0][j] = ratio*scalar_product_basis(u0, j); 
+      U[v][0][j] = scalar_product_basis(u0, j); 
     }
   }
 
@@ -65,24 +62,29 @@ double dgm::scalar_product_basis(func f1, int j) {
   auto f1_stdint = [this, &f1](double y) {return f1((x(v + 1) - x(v))*y/2 + (x(v + 1) + x(v))/2);};
   auto f2_stdint = [this, j](double y) {return phi((x(v + 1) - x(v))*y/2 + (x(v + 1) + x(v))/2, j);};
 
-  Eigen::ArrayXd roots(k);
-  roots = get_roots(k);
-  Eigen::ArrayXd weights(k);
-  weights = get_weights(k);
+  Eigen::ArrayXd roots(2*k);
+  roots = get_roots(2*k);
+  Eigen::ArrayXd weights(2*k);
+  weights = get_weights(2*k);
   double res = 0;
 
-  for(int i = 0; i < k; i++) {
+  for(int i = 0; i < 2*k; i++) {
     res += weights(i)*f1_stdint(roots(i))*f2_stdint(roots(i));
   }
 
-  return res;
+  double norm = 0;
+  for(int i = 0; i < 2*k; i++) {
+    norm += weights(i)*f2_stdint(roots(i))*f2_stdint(roots(i));
+  }
+
+  return res/norm;
 }
 
 void dgm::update_flux() { 
   v_def = true;
   for(v = 0; v < N; v++) {
     for(int j = 0; j < k; j++) {
-      if(j % 2 == 0) G[v][j] = (-g(v + 1)*phi(x(v + 1), j) + g(v)*phi(x(v), j));
+      if(1) G[v][j] = (g(v + 1)*phi(x(v + 1), j) - g(v)*phi(x(v), j));
     } 
   }
   v_def = false;
@@ -92,19 +94,6 @@ double dgm::g(int i) {
   // indexing for x(i) works because we have v fixed and reconstruct 
   // maps x(v + 1) to 1 for any i so x(v + 1) returns the rightmost point 
   // of corresponding section
-  /*
-  #ifdef UPWIND
-  if(i == v) {
-    if(v == 0) {
-      return reconstruct(x(v + 1), U.back().back());
-    } else {
-      return reconstruct(x(v + 1), U[v - 1].back());
-    }
-  } else {
-    return reconstruct(x(v + 1), U[v].back());
-  }
-  #endif
-  */
   double val_left = 0., val_right = 0.;
   if(i == v) {
     val_right = reconstruct(x(v), U[v].back());
@@ -123,17 +112,6 @@ double dgm::g(int i) {
   }
 
   return val_left;
-
-  //doesn't work, mb will fix later for fun
-  #ifdef CENTERED
-    if(i == 0) {
-      return (reconstruct(x(i + 1), U[N - 1].back()) + reconstruct(x(i), U[0].back()))/2;
-    } else if(i == N) {
-      return (reconstruct(x(i), U[i - 1].back()) + reconstruct(x(i - 1), U[0].back()))/2;
-    } else {
-      return (reconstruct(x(i + 1), U[i - 1].back()) + reconstruct(x(i), U[i].back()))/2;
-    }
-  #endif
 }
 
 double dgm::reconstruct(double p, Eigen::VectorXd &coef) {
@@ -166,13 +144,10 @@ void dgm::time_step_mp(double h) {
 }
 
 void dgm::solve(double h) {
-  double dx = x(1) - x(0);
-  while(h > dx) h /= 2;
-  std::cout << h << " " << x(1) - x(0) << std::endl;
   double rt = t0;
   nt = t0 + dt;
   while(rt < t) {
-    time_step_mp(h);
+    time_step(h);
     update_flux();
     if(rt <= nt && rt + h >= nt) {
       std::string oname = "dg_" +  std::to_string((int)(nt*1e4));
@@ -183,10 +158,18 @@ void dgm::solve(double h) {
   }
 }
 
+void dgm::intgr() {
+  double dx = x(1) - x(0);
+  double h = dx*0.01;
+  solve(h);
+}
+
+/* Неправильно реализовано
+
 void dgm::integrate(double eps) {
   double dx = x(1) - x(0);
   double h = (t - t0)/10;
-  while(h > dx) h /= 2;
+  while(h > dx*0.1) h /= 2;
   solve(h);
   std::vector<vect> Utmp = U;
   double errfin = 0;
@@ -220,11 +203,11 @@ double dgm::sol_dist(std::vector<vect> &U1, std::vector<vect> &U2) {
   }
   return tm;
 }
+*/
 
 Eigen::VectorXd dgm::method(const Eigen::VectorXd &u) { 
-  double ci = a/(x(v + 1) - x(v));
-  double hv = sqrt(x(v + 1) - x(v));
-  return hv*hv*K*u + hv*G[v];
+  double ci = 2./(x(v + 1) - x(v));
+  return ci*Minv*(K*u - G[v]);
 }
 
 void dgm::write(std::string name) {
@@ -272,7 +255,7 @@ double dgm::phi(double p, int j) {
     std::cout << "warning: " << v_def << std::endl;
   }
   double hv = x(v + 1) - x(v);
-  return 1./sqrt(hv)*sqrt(2*j + 1)*P(j, 2*(p - x(v))/hv - 1);
+  return P(j, 2*(p - x(v))/hv - 1);
 }
 
 void dgm::debug_drawt(std::string name) {
