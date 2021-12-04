@@ -7,3 +7,8 @@ saving_1d_to_vtk.cpp
 *.dat
 *.o
 dg
+<<<<<<< HEAD
+=======
+output/
+gp/
+>>>>>>> class
